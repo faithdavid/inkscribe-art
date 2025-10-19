@@ -13,6 +13,12 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        'tangerine': ['Tangerine', 'cursive'],
+        'great-vibes': ['Great Vibes', 'cursive'],
+        'dancing-script': ['Dancing Script', 'cursive'],
+        'allura': ['Allura', 'cursive'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
