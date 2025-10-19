@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,8 +7,10 @@ import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import paperBg from "@/assets/paper-background.png";
-import { Download, Play, RotateCcw } from "lucide-react";
+import { Download, Play, RotateCcw, Video } from "lucide-react";
 import { FlowWriteAnimation } from "@/components/FlowWriteAnimation";
+import { useAnimationRecorder } from "@/hooks/useAnimationRecorder";
+import { useToast } from "@/hooks/use-toast";
 
 type AnimationStyle = "typewriter" | "shimmer" | "fluid" | "flowwrite";
 type FontFamily = "tangerine" | "great-vibes" | "dancing-script" | "allura";
@@ -23,6 +25,10 @@ const Index = () => {
   const [speed, setSpeed] = useState([100]);
   const [isAnimating, setIsAnimating] = useState(false);
   const [showCursor, setShowCursor] = useState(false);
+  const [canDownload, setCanDownload] = useState(false);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+  const { isRecording, startRecording, stopRecording, downloadRecording } = useAnimationRecorder();
   const maxChars = 200;
 
   const fontSizeClasses = {
@@ -55,21 +61,60 @@ const Index = () => {
         if (animationStyle === "typewriter") {
           setShowCursor(true);
         }
+        
+        // Stop recording after animation completes
+        setTimeout(async () => {
+          if (isRecording) {
+            await stopRecording();
+            setCanDownload(true);
+            toast({
+              title: "Animation Complete",
+              description: "Your animation is ready to download!",
+            });
+          }
+        }, 1000); // Wait 1 second after animation completes
       }
     }, speed[0]);
 
     return () => clearInterval(interval);
-  }, [isAnimating, text, speed, animationStyle]);
+  }, [isAnimating, text, speed, animationStyle, isRecording, stopRecording, toast]);
 
-  const handleGenerate = () => {
-    if (!text.trim()) return;
+  const handleGenerate = async () => {
+    if (!text.trim() || !previewRef.current) return;
+    
+    setCanDownload(false);
     setIsAnimating(true);
+    
+    // Start recording
+    const previewElement = previewRef.current;
+    await startRecording(previewElement);
   };
 
   const handleReset = () => {
     setDisplayText("");
     setIsAnimating(false);
     setShowCursor(false);
+    setCanDownload(false);
+  };
+
+  const handleDownload = async () => {
+    try {
+      const blob = await stopRecording();
+      if (blob) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        downloadRecording(blob, `typewriter-animation-${timestamp}.webm`);
+        toast({
+          title: "Download Started",
+          description: "Your animation video is being downloaded.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Download Failed",
+        description: "There was an error downloading your video.",
+        variant: "destructive",
+      });
+    }
   };
 
   const renderAnimatedText = () => {
@@ -268,6 +313,7 @@ const Index = () => {
           {/* Preview Panel */}
           <div className="relative">
             <div
+              ref={previewRef}
               className="relative w-full aspect-[3/4] rounded-lg overflow-hidden shadow-2xl"
               style={{
                 backgroundImage: `url(${paperBg})`,
@@ -299,16 +345,25 @@ const Index = () => {
               </div>
             </div>
 
-            {displayText && !isAnimating && (
-              <Button
-                className="mt-4 w-full"
-                size="lg"
-                variant="secondary"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Download Video (Coming Soon)
-              </Button>
-            )}
+            <div className="flex gap-3 mt-4">
+              {isRecording && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-destructive/10 text-destructive rounded-lg flex-1">
+                  <Video className="w-4 h-4 animate-pulse" />
+                  <span className="text-sm font-medium">Recording...</span>
+                </div>
+              )}
+              
+              {canDownload && !isRecording && (
+                <Button
+                  onClick={handleDownload}
+                  className="flex-1"
+                  size="lg"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download Video
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>
