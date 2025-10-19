@@ -8,8 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import paperBg from "@/assets/paper-background.png";
 import { Download, Play, RotateCcw } from "lucide-react";
+import { FlowWriteAnimation } from "@/components/FlowWriteAnimation";
 
-type AnimationStyle = "typewriter" | "shimmer" | "fluid";
+type AnimationStyle = "typewriter" | "shimmer" | "fluid" | "flowwrite";
 type FontFamily = "tangerine" | "great-vibes" | "dancing-script" | "allura";
 
 const Index = () => {
@@ -72,6 +73,17 @@ const Index = () => {
   };
 
   const renderAnimatedText = () => {
+    if (animationStyle === "flowwrite") {
+      return (
+        <FlowWriteAnimation
+          text={displayText}
+          color={textColor}
+          speed={speed[0]}
+          className={`${fontFamilyClasses[fontFamily]} ${fontSizeClasses[fontSize]}`}
+        />
+      );
+    }
+
     if (animationStyle === "fluid") {
       return (
         <div className="flex flex-wrap justify-center gap-1">
@@ -186,6 +198,7 @@ const Index = () => {
                   <SelectItem value="typewriter">Classic Typewriter</SelectItem>
                   <SelectItem value="shimmer">Glitter Shimmer</SelectItem>
                   <SelectItem value="fluid">Fluid Reveal</SelectItem>
+                  <SelectItem value="flowwrite">FlowWrite (Handwriting)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
