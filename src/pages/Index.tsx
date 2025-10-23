@@ -54,6 +54,28 @@ const Index = () => {
     setShowCursor(false);
     let currentIndex = 0;
 
+    // Calculate total animation duration based on style
+    const calculateAnimationDuration = () => {
+      const baseDelay = speed[0];
+      const textLength = text.length;
+      
+      switch (animationStyle) {
+        case "flowwrite":
+          // FlowWrite has staggered delays: each char starts at index * (speed/10)
+          // Plus each char's own animation takes ~300ms
+          return textLength * (baseDelay / 10) + 500;
+        case "fluid":
+          // Fluid has 50ms delay per character plus animation duration
+          return textLength * 50 + 500;
+        case "shimmer":
+          // Shimmer animation takes about 2 seconds total
+          return textLength * baseDelay + 2000;
+        default:
+          // Typewriter is character by character
+          return textLength * baseDelay;
+      }
+    };
+
     const interval = setInterval(() => {
       if (currentIndex < text.length) {
         setDisplayText(text.slice(0, currentIndex + 1));
@@ -65,7 +87,12 @@ const Index = () => {
           setShowCursor(true);
         }
         
-        // Stop recording after animation completes
+        // Calculate extra time needed for the animation to visually complete
+        const totalAnimationTime = calculateAnimationDuration();
+        const elapsedTime = text.length * speed[0];
+        const extraTime = Math.max(totalAnimationTime - elapsedTime, 0) + 1000;
+        
+        // Stop recording after animation fully completes
         setTimeout(async () => {
           if (isRecording) {
             const blob = await stopRecording();
@@ -78,7 +105,7 @@ const Index = () => {
               });
             }
           }
-        }, 1000); // Wait 1 second after animation completes
+        }, extraTime);
       }
     }, speed[0]);
 
