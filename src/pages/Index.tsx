@@ -10,6 +10,7 @@ import paperBg from "@/assets/paper-background.png";
 import { Download, Play, RotateCcw, Video } from "lucide-react";
 import { FlowWriteAnimation } from "@/components/FlowWriteAnimation";
 import { useAnimationRecorder } from "@/hooks/useAnimationRecorder";
+import { useMp4Converter } from "@/hooks/useMp4Converter";
 import { useToast } from "@/hooks/use-toast";
 
 type AnimationStyle = "typewriter" | "shimmer" | "fluid" | "flowwrite";
@@ -26,8 +27,10 @@ const Index = () => {
   const [isAnimating, setIsAnimating] = useState(false);
   const [showCursor, setShowCursor] = useState(false);
   const [canDownload, setCanDownload] = useState(false);
+  const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { convertWebMToMp4, isConverting, progress } = useMp4Converter();
   const { isRecording, startRecording, stopRecording, downloadRecording } = useAnimationRecorder();
   const maxChars = 200;
 
@@ -65,12 +68,15 @@ const Index = () => {
         // Stop recording after animation completes
         setTimeout(async () => {
           if (isRecording) {
-            await stopRecording();
-            setCanDownload(true);
-            toast({
-              title: "Animation Complete",
-              description: "Your animation is ready to download!",
-            });
+            const blob = await stopRecording();
+            if (blob) {
+              setVideoBlob(blob);
+              setCanDownload(true);
+              toast({
+                title: "Animation Complete",
+                description: "Your animation is ready to download as MP4.",
+              });
+            }
           }
         }, 1000); // Wait 1 second after animation completes
       }
@@ -95,25 +101,39 @@ const Index = () => {
     setIsAnimating(false);
     setShowCursor(false);
     setCanDownload(false);
+    setVideoBlob(null);
   };
 
   const handleDownload = async () => {
     try {
-      const blob = await stopRecording();
-      if (blob) {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-        downloadRecording(blob, `typewriter-animation-${timestamp}.webm`);
+      if (!videoBlob) {
         toast({
-          title: "Download Started",
-          description: "Your animation video is being downloaded.",
+          title: "No video available",
+          description: "Generate the animation first, then try downloading.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({ title: "Converting to MP4…", description: "This may take a moment." });
+      const mp4 = await convertWebMToMp4(videoBlob);
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      downloadRecording(mp4, `typewriter-animation-${timestamp}.mp4`);
+      toast({
+        title: "Download Ready",
+        description: "Your MP4 video is being downloaded.",
+      });
+    } catch (error) {
+      console.error(error);
+      // Fallback: offer WebM if MP4 conversion fails
+      if (videoBlob) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        downloadRecording(videoBlob, `typewriter-animation-${timestamp}.webm`);
+        toast({
+          title: "MP4 conversion failed",
+          description: "Downloaded WebM as a fallback.",
         });
       }
-    } catch (error) {
-      toast({
-        title: "Download Failed",
-        description: "There was an error downloading your video.",
-        variant: "destructive",
-      });
     }
   };
 
@@ -358,9 +378,10 @@ const Index = () => {
                   onClick={handleDownload}
                   className="flex-1"
                   size="lg"
+                  disabled={isConverting}
                 >
                   <Download className="w-4 h-4 mr-2" />
-                  Download Video
+                  {isConverting ? `Converting…` : `Download MP4`}
                 </Button>
               )}
             </div>
