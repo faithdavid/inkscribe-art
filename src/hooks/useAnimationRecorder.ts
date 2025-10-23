@@ -27,35 +27,62 @@ export const useAnimationRecorder = (): UseAnimationRecorderReturn => {
       // Scale for better quality
       ctx.scale(2, 2);
 
-      // Capture using html2canvas style rendering
+      // Load the background image from CSS
+      const computedStyle = window.getComputedStyle(element);
+      const bgImageUrl = computedStyle.backgroundImage.slice(5, -2); // Remove 'url("' and '")'
+      
+      const backgroundImage = new Image();
+      backgroundImage.crossOrigin = "anonymous";
+      backgroundImage.src = bgImageUrl;
+      
+      await new Promise((resolve, reject) => {
+        backgroundImage.onload = resolve;
+        backgroundImage.onerror = reject;
+      });
+
+      // Capture using manual rendering
       const captureFrame = () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
         // Draw the background image
-        const bgImage = element.querySelector("img") as HTMLImageElement;
-        if (bgImage) {
-          ctx.drawImage(bgImage, 0, 0, rect.width, rect.height);
-        }
+        ctx.drawImage(backgroundImage, 0, 0, rect.width, rect.height);
+        
+        // Draw gradient overlay
+        const gradient = ctx.createLinearGradient(0, 0, 0, rect.height);
+        gradient.addColorStop(0, "transparent");
+        gradient.addColorStop(0.5, "transparent");
+        gradient.addColorStop(1, "rgba(0, 0, 0, 0.2)");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, rect.width, rect.height);
 
         // Get computed styles and draw text
-        const textElements = element.querySelectorAll("span, div");
-        textElements.forEach((el) => {
-          const htmlEl = el as HTMLElement;
-          const styles = window.getComputedStyle(htmlEl);
-          const elRect = htmlEl.getBoundingClientRect();
-          
-          ctx.fillStyle = styles.color;
-          ctx.font = `${styles.fontSize} ${styles.fontFamily}`;
-          ctx.textAlign = "center";
-          
-          const text = htmlEl.textContent || "";
-          const x = elRect.left - rect.left + elRect.width / 2;
-          const y = elRect.top - rect.top + elRect.height / 2;
-          
-          if (text && styles.opacity !== "0") {
-            ctx.fillText(text, x, y);
-          }
-        });
+        const textContainer = element.querySelector("div > div:last-child") as HTMLElement;
+        if (textContainer) {
+          const textElements = textContainer.querySelectorAll("span");
+          textElements.forEach((el) => {
+            const htmlEl = el as HTMLElement;
+            const styles = window.getComputedStyle(htmlEl);
+            const elRect = htmlEl.getBoundingClientRect();
+            
+            const opacity = parseFloat(styles.opacity);
+            if (opacity > 0) {
+              ctx.fillStyle = styles.color;
+              ctx.font = `${styles.fontWeight} ${styles.fontSize} ${styles.fontFamily}`;
+              ctx.textAlign = "center";
+              ctx.globalAlpha = opacity;
+              
+              const text = htmlEl.textContent || "";
+              const x = elRect.left - rect.left + elRect.width / 2;
+              const y = elRect.top - rect.top + elRect.height / 2;
+              
+              if (text) {
+                ctx.fillText(text, x, y);
+              }
+              
+              ctx.globalAlpha = 1;
+            }
+          });
+        }
       };
 
       // Start capturing frames
