@@ -11,7 +11,8 @@ import { Download, Play, RotateCcw, Video } from "lucide-react";
 import { FlowWriteAnimation } from "@/components/FlowWriteAnimation";
 import { useAnimationRecorder } from "@/hooks/useAnimationRecorder";
 import { useMp4Converter } from "@/hooks/useMp4Converter";
-import { useToast } from "@/hooks/use-toast";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 type AnimationStyle = "typewriter" | "shimmer" | "fluid" | "flowwrite";
 type FontFamily = "tangerine" | "great-vibes" | "dancing-script" | "allura";
@@ -29,10 +30,10 @@ const Index = () => {
   const [canDownload, setCanDownload] = useState(false);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
-  const { toast } = useToast();
   const { convertWebMToMp4, isConverting, progress } = useMp4Converter();
   const { isRecording, startRecording, stopRecording, downloadRecording } = useAnimationRecorder();
   const maxChars = 200;
+  const MIN_VIDEO_DURATION = 10000;
 
   const fontSizeClasses = {
     small: "text-3xl md:text-4xl",
@@ -47,38 +48,54 @@ const Index = () => {
     allura: "font-allura",
   };
 
+  const getTextParts = (input: string) => {
+    const words = input.trim().split(/[\s,]+/).filter(Boolean);
+    if (words.length <= 6) {
+      return { staticText: "", animatedText: input };
+    }
+    const staticWords = words.slice(0, -4).join(" ");
+    const animatedWords = words.slice(-4).join(" ");
+    return { staticText: staticWords, animatedText: animatedWords };
+  };
+
   useEffect(() => {
     if (!isAnimating || !text) return;
 
+    const { staticText, animatedText } = getTextParts(text);
     setDisplayText("");
     setShowCursor(false);
     let currentIndex = 0;
 
-    // Calculate total animation duration based on style
     const calculateAnimationDuration = () => {
       const baseDelay = speed[0];
-      const textLength = text.length;
-      
+      const animatedLength = animatedText.length;
+      let animationTime: number;
+
       switch (animationStyle) {
         case "flowwrite":
-          // FlowWrite has staggered delays: each char starts at index * (speed/10)
-          // Plus each char's own animation takes ~300ms
-          return textLength * (baseDelay / 10) + 500;
+          animationTime = animatedLength * (baseDelay / 1000 + 0.6) + 1.0;
+          break;
         case "fluid":
-          // Fluid has 50ms delay per character plus animation duration
-          return textLength * 50 + 500;
+          animationTime = animatedLength * (0.05 + 0.5) + 1.0;
+          break;
         case "shimmer":
-          // Shimmer animation takes about 2 seconds total
-          return textLength * baseDelay + 2000;
+          animationTime = animatedLength * (baseDelay / 1000) + 3.0;
+          break;
         default:
-          // Typewriter is character by character
-          return textLength * baseDelay;
+          animationTime = animatedLength * (baseDelay / 1000) + 0.5;
+          break;
       }
+
+      return Math.max(animationTime * 1000, MIN_VIDEO_DURATION);
     };
 
+    if (staticText) {
+      setDisplayText(staticText + (animatedText ? " " : ""));
+    }
+
     const interval = setInterval(() => {
-      if (currentIndex < text.length) {
-        setDisplayText(text.slice(0, currentIndex + 1));
+      if (currentIndex < animatedText.length) {
+        setDisplayText((prev) => prev + animatedText[currentIndex]);
         currentIndex++;
       } else {
         clearInterval(interval);
@@ -86,23 +103,20 @@ const Index = () => {
         if (animationStyle === "typewriter") {
           setShowCursor(true);
         }
-        
-        // Calculate extra time needed for the animation to visually complete
+
         const totalAnimationTime = calculateAnimationDuration();
-        const elapsedTime = text.length * speed[0];
-        const extraTime = Math.max(totalAnimationTime - elapsedTime, 0) + 1000;
-        
-        // Stop recording after animation fully completes
+        const elapsedTime = animatedText.length * speed[0];
+        const extraTime = Math.max(totalAnimationTime - elapsedTime, 0);
+
         setTimeout(async () => {
           if (isRecording) {
             const blob = await stopRecording();
             if (blob) {
               setVideoBlob(blob);
               setCanDownload(true);
-              toast({
-                title: "Animation Complete",
-                description: "Your animation is ready to download as MP4.",
-              });
+              toast.success("Animation recorded! Ready to download.");
+            } else {
+              toast.error("Recording failed. Please try again.");
             }
           }
         }, extraTime);
@@ -110,17 +124,18 @@ const Index = () => {
     }, speed[0]);
 
     return () => clearInterval(interval);
-  }, [isAnimating, text, speed, animationStyle, isRecording, stopRecording, toast]);
+  }, [isAnimating, text, speed, animationStyle, isRecording, stopRecording]);
 
   const handleGenerate = async () => {
-    if (!text.trim() || !previewRef.current) return;
-    
+    if (!text.trim() || !previewRef.current) {
+      toast.error("Please enter text to animate.");
+      return;
+    }
+
     setCanDownload(false);
     setIsAnimating(true);
-    
-    // Start recording
-    const previewElement = previewRef.current;
-    await startRecording(previewElement);
+    toast.info("Starting animation and recording...");
+    await startRecording(previewRef.current);
   };
 
   const handleReset = () => {
@@ -129,61 +144,68 @@ const Index = () => {
     setShowCursor(false);
     setCanDownload(false);
     setVideoBlob(null);
+    toast.info("Animation reset.");
   };
 
   const handleDownload = async () => {
     try {
       if (!videoBlob) {
-        toast({
-          title: "No video available",
-          description: "Generate the animation first, then try downloading.",
-          variant: "destructive",
-        });
+        toast.error("No video available. Generate the animation first.");
         return;
       }
 
-      toast({ title: "Converting to MP4…", description: "This may take a moment." });
+      toast.info(`Converting to MP4... ${progress}%`, {
+        autoClose: false,
+        toastId: "convert-toast",
+      });
       const mp4 = await convertWebMToMp4(videoBlob);
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       downloadRecording(mp4, `typewriter-animation-${timestamp}.mp4`);
-      toast({
-        title: "Download Ready",
-        description: "Your MP4 video is being downloaded.",
-      });
+      toast.success("Download ready!");
     } catch (error) {
       console.error(error);
-      // Fallback: offer WebM if MP4 conversion fails
+      toast.error("MP4 conversion failed. Downloading WebM.");
       if (videoBlob) {
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
         downloadRecording(videoBlob, `typewriter-animation-${timestamp}.webm`);
-        toast({
-          title: "MP4 conversion failed",
-          description: "Downloaded WebM as a fallback.",
-        });
       }
     }
   };
 
   const renderAnimatedText = () => {
+    const { staticText, animatedText } = getTextParts(displayText);
+    const animatedTextToRender = animatedText || displayText;
+
+    const renderStaticText = () => (
+      <span className="text-justify" style={{ color: textColor }}>
+        {staticText}
+        {staticText && animatedTextToRender ? "\u00A0" : ""}
+      </span>
+    );
+
     if (animationStyle === "flowwrite") {
       return (
-        <FlowWriteAnimation
-          text={displayText}
-          color={textColor}
-          speed={speed[0]}
-          className={`${fontFamilyClasses[fontFamily]} ${fontSizeClasses[fontSize]}`}
-        />
+        <div className="flex flex-wrap justify-center gap-1">
+          {renderStaticText()}
+          <FlowWriteAnimation
+            text={animatedTextToRender}
+            color={textColor}
+            speed={speed[0]}
+            className={`${fontFamilyClasses[fontFamily]} ${fontSizeClasses[fontSize]}`}
+          />
+        </div>
       );
     }
 
     if (animationStyle === "fluid") {
       return (
         <div className="flex flex-wrap justify-center gap-1">
-          {displayText.split("").map((char, index) => (
+          {renderStaticText()}
+          {animatedTextToRender.split("").map((char, index) => (
             <motion.span
               key={index}
               className="char-reveal inline-block"
-              style={{ 
+              style={{
                 animationDelay: `${index * 50}ms`,
                 color: textColor,
               }}
@@ -197,28 +219,38 @@ const Index = () => {
 
     if (animationStyle === "shimmer") {
       return (
-        <span className="text-shimmer" style={{ 
-          backgroundImage: `linear-gradient(90deg, ${textColor} 0%, #ffffff 50%, ${textColor} 100%)`,
-          backgroundSize: "200% auto",
-          backgroundClip: "text",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-        }}>
-          {displayText}
-        </span>
+        <div className="flex flex-wrap justify-center gap-1">
+          {renderStaticText()}
+          <span
+            className="text-shimmer"
+            style={{
+              backgroundImage: `linear-gradient(90deg, ${textColor} 0%, #ffffff 50%, ${textColor} 100%)`,
+              backgroundSize: "200% auto",
+              backgroundClip: "text",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
+            {animatedTextToRender}
+          </span>
+        </div>
       );
     }
 
     return (
-      <>
-        <span style={{ color: textColor }}>{displayText}</span>
-        {showCursor && <span className="typewriter-cursor" style={{ backgroundColor: textColor }} />}
-      </>
+      <div className="flex flex-wrap justify-center gap-1">
+        {renderStaticText()}
+        <span style={{ color: textColor }}>{animatedTextToRender}</span>
+        {showCursor && (
+          <span className="typewriter-cursor" style={{ backgroundColor: textColor }} />
+        )}
+      </div>
     );
   };
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
+      <ToastContainer position="top-right" autoClose={3000} />
       <div className="max-w-7xl mx-auto">
         <header className="text-center mb-8">
           <h1 className="text-4xl md:text-5xl font-bold text-primary mb-2">

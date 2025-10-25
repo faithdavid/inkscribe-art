@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+.text-justify {
+  text-align: justify;
+  display: inline-block;
+  vertical-align: top;
+}
+
+.char-reveal,
+.text-shimmer,
+.typewriter-cursor {
+  display: inline-block;
+  vertical-align: top;
+}
+
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.
 */
